@@ -7,6 +7,8 @@ COPY .npmrc package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm-store,target=/root/.pnpm-store \
     pnpm install --frozen-lockfile
 
+ENV NUXT_OMDBAPI_API_KEY=${NUXT_OMDBAPI_API_KEY}
+
 COPY . .
 RUN pnpm build
 

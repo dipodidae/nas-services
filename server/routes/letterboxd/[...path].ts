@@ -1,6 +1,22 @@
 import type { H3Event } from 'h3'
 import * as cheerio from 'cheerio'
 
+interface RadarrData {
+  title: string
+  year: string
+  imdbId: string
+}
+
+interface MovieData {
+  initialLetterboxdFetch?: {
+    productionDataEndpoint: string
+  }
+  letterboxdFilm?: LetterboxdFilm
+  omdbMovie?: OmdbapiMovie
+  radarrData?: RadarrData
+  error?: Error
+}
+
 interface LetterboxdDirector {
   name: string
 }
@@ -64,10 +80,10 @@ function getUrl(event: H3Event): string {
   return `https://letterboxd.com/${path}`
 }
 
-function getMoviesFromContent(content: string) {
-  const $ = cheerio.load(content)
+function getMoviesFromContent(content: string): MovieData[] {
+  const movies: MovieData[] = []
 
-  return $.extract({
+  cheerio.load(content).extract({
     movies: [
       {
         selector: 'li.poster-container',
@@ -79,42 +95,63 @@ function getMoviesFromContent(content: string) {
         },
       },
     ],
-  }).movies
+  }).movies.forEach((movie) => {
+    movies.push({
+      initialLetterboxdFetch: {
+        productionDataEndpoint: movie.productionDataEndpoint ?? '',
+      },
+    })
+  })
+
+  return movies
 }
 
-async function mapLetterboxdProductionData(movies: ReturnType<typeof getMoviesFromContent>) {
+async function mapLetterboxdProductionData(movies: MovieData[]): Promise<MovieData[]> {
   return Promise.all(movies.map(async (movie) => {
-    return await $fetch<LetterboxdFilm>(`https://letterboxd.com/${movie.productionDataEndpoint}`, {
+    const response = await $fetch<LetterboxdFilm>(`https://letterboxd.com${movie.initialLetterboxdFetch?.productionDataEndpoint}`, {
       responseType: 'json',
     })
+
+    movie.letterboxdFilm = response
+
+    return movie
   }))
 }
 
-async function mapOmdbData(movies: LetterboxdFilm[], apiKey: string) {
+async function mapOmdbData(movies: MovieData[], apiKey: string): Promise<MovieData[]> {
   return Promise.all(movies.map(async (movie) => {
-    try {
-      return await $fetch<OmdbapiMovie>(`https://www.omdbapi.com/?t=${movie.name}&y=${movie.releaseYear}&apikey=${apiKey}`, {
-        responseType: 'json',
-      })
+    if (movie.error) {
+      return movie
     }
-    catch (error) {
-      return {
-        error,
-      }
-    }
+
+    const response = await $fetch<OmdbapiMovie>(`http://www.omdbapi.com/?t=${movie.letterboxdFilm?.name}&y=${movie.letterboxdFilm?.releaseYear}&apikey=${apiKey}`, {
+      responseType: 'json',
+    })
+
+    movie.omdbMovie = response
+
+    return movie
   }))
+}
+
+function mapOmdbDataToRadarrData(movies: MovieData[]): RadarrData[] {
+  return movies.map((movie): RadarrData => {
+    return {
+      title: movie.letterboxdFilm?.name ?? movie.omdbMovie?.Title ?? 'Unknown',
+      year: String(movie.letterboxdFilm?.releaseYear) ?? String(movie.omdbMovie?.Year) ?? 'Unknown',
+      imdbId: movie.omdbMovie?.imdbID ?? 'Unknown',
+    }
+  })
 }
 
 export default defineEventHandler(async (event) => {
-  const omdbApiKey = useRuntimeConfig(event).omdbapi.apiKey
-
   const content = await getContent(getUrl(event))
 
-  const movies = getMoviesFromContent(content)
+  let movies = getMoviesFromContent(content)
 
-  const mappedMovies = await mapLetterboxdProductionData(movies)
+  movies = await mapLetterboxdProductionData(movies)
 
-  const omdbMovies = await mapOmdbData(mappedMovies, omdbApiKey)
+  movies = await mapOmdbData(movies, useRuntimeConfig(event).omdbapi.apiKey)
 
-  return omdbMovies
+  return mapOmdbDataToRadarrData(movies)
 })
