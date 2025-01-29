@@ -2,9 +2,12 @@ import type { H3Event } from 'h3'
 import * as cheerio from 'cheerio'
 
 interface RadarrData {
+  id?: string
+  release_year: string
   title: string
-  year: string
-  imdbId: string
+  imdb_id: string
+  clean_title: string
+  adult: boolean
 }
 
 interface MovieData {
@@ -106,7 +109,7 @@ function getMoviesFromContent(content: string): MovieData[] {
   return movies
 }
 
-async function mapLetterboxdProductionData(movies: MovieData[]): Promise<MovieData[]> {
+async function addLetterboxDataToMovies(movies: MovieData[]): Promise<MovieData[]> {
   return Promise.all(movies.map(async (movie) => {
     const response = await $fetch<LetterboxdFilm>(`https://letterboxd.com${movie.initialLetterboxdFetch?.productionDataEndpoint}`, {
       responseType: 'json',
@@ -118,7 +121,7 @@ async function mapLetterboxdProductionData(movies: MovieData[]): Promise<MovieDa
   }))
 }
 
-async function mapOmdbData(movies: MovieData[], apiKey: string): Promise<MovieData[]> {
+async function addOmdbDataToMovies(movies: MovieData[], apiKey: string): Promise<MovieData[]> {
   return Promise.all(movies.map(async (movie) => {
     if (movie.error) {
       return movie
@@ -134,12 +137,19 @@ async function mapOmdbData(movies: MovieData[], apiKey: string): Promise<MovieDa
   }))
 }
 
-function mapOmdbDataToRadarrData(movies: MovieData[]): RadarrData[] {
-  return movies.map((movie): RadarrData => {
-    return {
+function addRadarrDataToMovies(movies: MovieData[]): MovieData[] {
+  return movies.map((movie): MovieData => {
+    const radarrData: RadarrData = {
       title: movie.letterboxdFilm?.name ?? movie.omdbMovie?.Title ?? 'Unknown',
-      year: String(movie.letterboxdFilm?.releaseYear) ?? String(movie.omdbMovie?.Year) ?? 'Unknown',
-      imdbId: movie.omdbMovie?.imdbID ?? 'Unknown',
+      release_year: String(movie.letterboxdFilm?.releaseYear) ?? String(movie.omdbMovie?.Year) ?? 'Unknown',
+      imdb_id: movie.omdbMovie?.imdbID ?? 'Unknown',
+      clean_title: movie.letterboxdFilm?.name?.replace(/[^a-z0-9]/gi, '') ?? 'Unknown',
+      adult: false,
+    }
+
+    return {
+      ...movie,
+      radarrData,
     }
   })
 }
@@ -149,9 +159,13 @@ export default defineEventHandler(async (event) => {
 
   let movies = getMoviesFromContent(content)
 
-  movies = await mapLetterboxdProductionData(movies)
+  movies = await addLetterboxDataToMovies(movies)
 
-  movies = await mapOmdbData(movies, useRuntimeConfig(event).omdbapi.apiKey)
+  movies = await addOmdbDataToMovies(movies, useRuntimeConfig(event).omdbapi.apiKey)
 
-  return mapOmdbDataToRadarrData(movies)
+  movies = addRadarrDataToMovies(movies)
+
+  return movies.map((movie) => {
+    return movie.radarrData
+  })
 })
