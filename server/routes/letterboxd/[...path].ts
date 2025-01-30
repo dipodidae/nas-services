@@ -138,18 +138,20 @@ async function getOmdbData(movie: LetterboxdMovie, omdbApiKey: string): Promise<
 }
 
 function getRadarrData(movie: Movie): RadarrMovie {
+  const unknown = 'Unknown'
+
   return {
-    id: String(movie.tmdbMovie?.id ?? 'Unknown'),
+    id: String(movie.tmdbMovie?.id ?? unknown),
     title: movie.letterboxdMovie?.name
       ?? movie.omdbMovie?.Title
-      ?? 'Unknown',
+      ?? unknown,
     release_year: String(movie.letterboxdMovie?.releaseYear)
       ?? String(movie.omdbMovie?.Year)
-      ?? 'Unknown',
+      ?? unknown,
     imdb_id: movie.omdbMovie?.imdbID
-      ?? 'Unknown',
+      ?? unknown,
     clean_title: movie.letterboxdMovie?.name?.replace(/[^a-z0-9]/gi, '')
-      ?? 'Unknown',
+      ?? unknown,
     adult: false,
   }
 }
