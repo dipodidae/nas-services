@@ -1,21 +1,27 @@
 import type { H3Event } from 'h3'
 import * as cheerio from 'cheerio'
 
+interface MovieServiceError {
+  service: string
+  message: string
+}
+
 interface MovieServiceBase {
   data?: any
-  error?: Error
+  error?: MovieServiceError
 }
 interface InitialMovieData {
   productionDataEndpoint: string
 }
 
 interface RadarrMovieData {
-  id?: string | Error
-  release_year: string | Error
-  title: string | Error
-  imdb_id: string | Error
-  clean_title: string | Error
+  id?: string
+  release_year: string
+  title: string
+  imdb_id: string
+  clean_title: string
   adult: boolean
+  errors?: MovieServiceError[]
 }
 
 interface LetterboxdDirector {
@@ -160,7 +166,7 @@ async function getLetterboxdMovie(movieInitial: InitialMovie): Promise<Letterbox
   }
   catch (error) {
     return {
-      error: error as Error,
+      error: createMovieServiceError('Letterboxd', error as Error),
     }
   }
 }
@@ -177,23 +183,43 @@ async function getOmdbMovie(movie: LetterboxdMovie, omdbApiKey: string): Promise
   }
   catch (error) {
     return {
-      error: error as Error,
+      error: createMovieServiceError('Omdb', error as Error),
     }
   }
+}
+
+function getErrorsFromMovie(movie: Movie): MovieServiceError[] {
+  return Object.entries(movie)
+    .filter(([_service, { error }]) => error)
+    .map(([_service, { error }]) => error)
 }
 
 function getRadarrData(movie: Movie): RadarrMovie {
   const unknown = 'Unknown'
 
+  const data: RadarrMovieData = {
+    id: String(movie.tmdbMovie?.data?.id || unknown),
+    title: movie.letterboxdMovie?.data?.name || unknown,
+    release_year: String(movie.letterboxdMovie.data?.releaseYear || unknown),
+    imdb_id: movie.omdbMovie?.data?.imdbID || unknown,
+    clean_title: movie.omdbMovie?.data?.Title || unknown,
+    adult: false,
+  }
+
+  const errors = getErrorsFromMovie(movie)
+
+  if (errors.length)
+    data.errors = errors
+
   return {
-    data: {
-      id: movie.tmdbMovie?.error || String(movie.tmdbMovie?.data?.id || unknown),
-      title: movie.letterboxdMovie?.error || movie.letterboxdMovie?.data?.name || unknown,
-      release_year: String(movie.letterboxdMovie.data?.releaseYear || unknown),
-      imdb_id: movie.omdbMovie?.error || movie.omdbMovie?.data?.imdbID || unknown,
-      clean_title: movie.omdbMovie?.error || movie.omdbMovie?.data?.Title || unknown,
-      adult: false,
-    },
+    data,
+  }
+}
+
+function createMovieServiceError(service: string, error: Error): MovieServiceError {
+  return {
+    service,
+    message: error.message,
   }
 }
 
@@ -213,7 +239,7 @@ async function getTmdbData(letterboxdMovie: LetterboxdMovie): Promise<TmdbMovie>
   }
   catch (error) {
     return {
-      error: error as Error,
+      error: createMovieServiceError('TMDb', error as Error),
     }
   }
 }
