@@ -1,8 +1,10 @@
-// https://nuxt.com/docs/api/configuration/nuxt-config
+import process from 'node:process'
+
 export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
     '@nuxt/ui',
+    'nuxt-api-party',
   ],
 
   devtools: { enabled: true },
@@ -35,6 +37,17 @@ export default defineNuxtConfig({
       allowedHosts: [
         'localhost.dpdd.duckdns.org',
       ],
+    },
+  },
+
+  apiParty: {
+    endpoints: {
+      tmdb: {
+        url: 'https://api.themoviedb.org/3',
+        headers: {
+          Authorization: `Bearer ${process.env.NUXT_TMDB_API_TOKEN!}`,
+        },
+      },
     },
   },
 

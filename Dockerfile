@@ -8,6 +8,8 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.pnpm-store \
     pnpm install --frozen-lockfile
 
 ENV NUXT_OMDBAPI_API_KEY=${NUXT_OMDBAPI_API_KEY}
+ENV NUXT_TMDB_API_TOKEN=${NUXT_TMDB_API_TOKEN}
+ENV NUXT_TMDB_API_KEY=${NUXT_TMDB_API_KEY}
 
 COPY . .
 RUN pnpm build
