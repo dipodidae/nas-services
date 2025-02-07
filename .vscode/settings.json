@@ -43,5 +43,6 @@
   },
   "editor.quickSuggestions": {
     "strings": "on"
-  }
+  },
+  "editor.gotoLocation.multipleDefinitions": "goto"
 }

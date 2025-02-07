@@ -1,25 +1,29 @@
 import type { H3Event } from 'h3'
 import * as cheerio from 'cheerio'
 
+// Error interface for movie services
 interface MovieServiceError {
   service: string
   message: string
 }
 
-interface MovieServiceBase {
-  data?: any
+// Base interface for movie services
+interface MovieServiceResponse<T> {
+  data?: T
   error?: MovieServiceError
 }
+
+// Interfaces for different movie data
 interface InitialMovieData {
   productionDataEndpoint: string
 }
 
 interface RadarrMovieData {
-  id?: string
-  release_year: string
   title: string
-  imdb_id: string
-  clean_title: string
+  id?: string
+  release_year?: string
+  imdb_id?: string
+  clean_title?: string
   adult: boolean
   errors?: MovieServiceError[]
 }
@@ -89,50 +93,38 @@ interface TmdbMovieData {
   vote_count: number
 }
 
-interface InitialMovie extends MovieServiceBase {
-  data?: InitialMovieData
+// Interfaces for movie service responses
+interface InitialMovieResponse extends MovieServiceResponse<InitialMovieData> {}
+interface LetterboxdMovieResponse extends MovieServiceResponse<LetterboxdMovieData> {}
+interface OmdbMovieResponse extends MovieServiceResponse<OmdbMovieData> {}
+interface TmdbMovieResponse extends MovieServiceResponse<TmdbMovieData> {}
+interface RadarrMovieResponse extends MovieServiceResponse<RadarrMovieData> {}
+
+// Interface for the complete movie data
+interface MovieData {
+  initialMovie: InitialMovieResponse
+  letterboxdMovie: LetterboxdMovieResponse
+  omdbMovie?: OmdbMovieResponse
+  tmdbMovie?: TmdbMovieResponse
+  radarrMovie?: RadarrMovieResponse
 }
 
-interface LetterboxdMovie extends MovieServiceBase {
-  data?: LetterboxdMovieData
-}
-
-interface OmdbMovie extends MovieServiceBase {
-  data?: OmdbMovieData
-}
-
-interface TmdbMovie extends MovieServiceBase {
-  data?: TmdbMovieData
-}
-
-interface RadarrMovie extends MovieServiceBase {
-  data?: RadarrMovieData
-}
-
-interface Movie {
-  initialMovie: InitialMovie
-  letterboxdMovie: LetterboxdMovie
-  omdbMovie?: OmdbMovie
-  tmdbMovie?: TmdbMovie
-  radarrMovie?: RadarrMovie
-}
-
-async function getContent(url: string): Promise<string> {
+// Utility functions
+async function fetchContent(url: string): Promise<string> {
   try {
-    const response = await $fetch<string>(url)
-    return response
+    return await $fetch<string>(url)
   }
   catch {
     return 'Error fetching content'
   }
 }
 
-function getUrl(event: H3Event): string {
+function extractUrl(event: H3Event): string {
   const path = getRouterParam(event, 'path')
   return `https://letterboxd.com/${path}`
 }
 
-function getInitialMoviesFromContent(content: string): InitialMovie[] {
+function parseInitialMovies(content: string): InitialMovieResponse[] {
   return cheerio.load(content).extract({
     movies: [
       {
@@ -152,127 +144,160 @@ function getInitialMoviesFromContent(content: string): InitialMovie[] {
   }))
 }
 
-async function getLetterboxdMovie(movieInitial: InitialMovie): Promise<LetterboxdMovie> {
+async function fetchLetterboxdMovie(initialMovie: InitialMovieResponse): Promise<LetterboxdMovieResponse> {
   try {
-    const endpoint = movieInitial.data?.productionDataEndpoint ?? ''
-
+    const endpoint = initialMovie.data?.productionDataEndpoint ?? ''
     const response = await $fetch<LetterboxdMovieData>(`https://letterboxd.com${endpoint}`, {
       responseType: 'json',
     })
 
-    return {
-      data: response,
+    if (!response.result) {
+      throw new Error('No results found')
     }
+
+    return { data: response }
   }
   catch (error) {
-    return {
-      error: createMovieServiceError('Letterboxd', error as Error),
-    }
+    return { error: createMovieServiceError('Letterboxd', error as Error) }
   }
 }
 
-async function getOmdbMovie(movie: LetterboxdMovie, omdbApiKey: string): Promise<OmdbMovie> {
+function extractPossibleTitles(movie: LetterboxdMovieResponse): string[] {
+  const titles: string[] = []
+
+  if (!movie.data)
+    return titles
+
+  if (movie.data.name)
+    titles.push(movie.data.name)
+  if (movie.data.originalName)
+    titles.push(movie.data.originalName)
+  if (movie.data.name.includes(':'))
+    titles.push(movie.data.name.split(':')[0])
+
+  return titles
+}
+
+async function fetchOmdbMovie(title: string, year: number, apiKey: string): Promise<OmdbMovieData> {
+  return $fetch<OmdbMovieData>(`http://www.omdbapi.com/?t=${title}&y=${year}&apikey=${apiKey}`, {
+    responseType: 'json',
+  })
+}
+
+async function fetchMovieData<T>(
+  movie: LetterboxdMovieResponse,
+  fetchFunction: (title: string) => Promise<T | undefined>,
+): Promise<T | undefined> {
+  const possibleTitles = extractPossibleTitles(movie)
+  for (const title of possibleTitles) {
+    const data = await fetchFunction(title)
+    if (data)
+      return data
+  }
+  return undefined
+}
+
+async function fetchOmdbMovieData(movie: LetterboxdMovieResponse, apiKey: string): Promise<OmdbMovieResponse> {
   try {
-    const response = await $fetch<OmdbMovieData>(`http://www.omdbapi.com/?t=${movie.data?.name}&y=${movie.data?.releaseYear}&apikey=${omdbApiKey}`, {
-      responseType: 'json',
+    const response = await fetchMovieData<OmdbMovieData>(movie, async (title) => {
+      return await fetchOmdbMovie(title, Number(movie.data?.releaseYear ?? ''), apiKey)
     })
 
-    return {
-      data: response,
+    if (!response || response.Response === 'False' || response.Type !== 'movie') {
+      throw new Error('No results found or not a movie')
     }
+
+    return { data: response }
   }
   catch (error) {
-    return {
-      error: createMovieServiceError('Omdb', error as Error),
-    }
+    return { error: createMovieServiceError('Omdb', error as Error) }
   }
 }
 
-function getErrorsFromMovie(movie: Movie): MovieServiceError[] {
-  return Object.entries(movie)
-    .filter(([_service, { error }]) => error)
-    .map(([_service, { error }]) => error)
+function extractErrors(movie: MovieData): MovieServiceError[] {
+  return Object.values(movie)
+    .filter((value): value is MovieServiceResponse<any> => !!value?.error)
+    .map(value => value.error!)
 }
 
-function getRadarrData(movie: Movie): RadarrMovie {
+function createRadarrMovieData(movie: MovieData): RadarrMovieResponse {
   const unknown = 'Unknown'
 
   const data: RadarrMovieData = {
-    id: String(movie.tmdbMovie?.data?.id || unknown),
     title: movie.letterboxdMovie?.data?.name || unknown,
-    release_year: String(movie.letterboxdMovie.data?.releaseYear || unknown),
-    imdb_id: movie.omdbMovie?.data?.imdbID || unknown,
-    clean_title: movie.omdbMovie?.data?.Title || unknown,
     adult: false,
   }
 
-  const errors = getErrorsFromMovie(movie)
+  if (movie.omdbMovie?.data) {
+    data.release_year = movie.omdbMovie.data.Year
+    data.imdb_id = movie.omdbMovie.data.imdbID
+    data.clean_title = movie.omdbMovie.data.Title
+  }
+
+  if (movie.tmdbMovie?.data) {
+    data.id = String(movie.tmdbMovie.data.id)
+  }
+
+  const errors = extractErrors(movie)
 
   if (errors.length)
     data.errors = errors
 
-  return {
-    data,
-  }
+  return { data }
 }
 
 function createMovieServiceError(service: string, error: Error): MovieServiceError {
-  return {
-    service,
-    message: error.message,
-  }
+  return { service, message: error.message }
 }
 
-async function getTmdbData(letterboxdMovie: LetterboxdMovie): Promise<TmdbMovie> {
+async function fetchTmdbMovieData(movie: LetterboxdMovieResponse): Promise<TmdbMovieResponse> {
   try {
-    const data = await $tmdb<{
-      page: number
-      results: TmdbMovie[]
-    }>('/search/movie', {
-      query: {
-        query: letterboxdMovie.data?.name,
-        year: letterboxdMovie.data?.releaseYear,
-      },
+    const response = await fetchMovieData<TmdbMovieData>(movie, async (title) => {
+      const query = { query: title, year: movie.data?.releaseYear }
+      const data = await $tmdb<{ page: number, results: TmdbMovieData[] }>('/search/movie', { query })
+      return data.results[0]
     })
 
-    return data.results[0]
+    if (!response) {
+      throw new Error('No results found')
+    }
+
+    return { data: response }
   }
   catch (error) {
-    return {
-      error: createMovieServiceError('TMDb', error as Error),
-    }
+    return { error: createMovieServiceError('TMDb', error as Error) }
   }
 }
 
-async function getMovieData(initialMovie: InitialMovie, omdbApiKey: string): Promise<Movie> {
-  const movie: Movie = {
-    initialMovie,
-    letterboxdMovie: await getLetterboxdMovie(initialMovie),
-  }
-
+async function fetchCompleteMovieData(initialMovie: InitialMovieResponse, omdbApiKey: string): Promise<MovieData> {
+  const letterboxdMovie = await fetchLetterboxdMovie(initialMovie)
   const [omdbMovie, tmdbMovie] = await Promise.all([
-    getOmdbMovie(movie.letterboxdMovie, omdbApiKey),
-    getTmdbData(movie.letterboxdMovie),
+    fetchOmdbMovieData(letterboxdMovie, omdbApiKey),
+    fetchTmdbMovieData(letterboxdMovie),
   ])
 
-  movie.omdbMovie = omdbMovie
-  movie.tmdbMovie = tmdbMovie
-  movie.radarrMovie = getRadarrData(movie)
-
-  return movie
+  return {
+    initialMovie,
+    letterboxdMovie,
+    omdbMovie,
+    tmdbMovie,
+    radarrMovie: createRadarrMovieData({
+      initialMovie,
+      letterboxdMovie,
+      omdbMovie,
+      tmdbMovie,
+    }),
+  }
 }
 
 export default defineEventHandler(async (event) => {
   const omdbApiKey = useRuntimeConfig(event).omdbapi.apiKey
-
-  const content = await getContent(getUrl(event))
+  const content = await fetchContent(extractUrl(event))
+  const initialMovies = parseInitialMovies(content)
 
   const movies = await Promise.all(
-    getInitialMoviesFromContent(content)
-      .map(async movie => await getMovieData(movie, omdbApiKey)),
+    initialMovies.map(async movie => await fetchCompleteMovieData(movie, omdbApiKey)),
   )
 
-  return movies.map((movie) => {
-    return movie.radarrMovie?.data
-  })
+  return movies.map(movie => movie.radarrMovie?.data)
 })

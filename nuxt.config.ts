@@ -15,8 +15,11 @@ export default defineNuxtConfig({
     omdbapi: {
       apiKey: '',
     },
-    public: {
-      domain: 'https://localhost.dpdd.duckdns.org',
+    twitter: {
+      oauth2: {
+        id: '',
+        secret: '',
+      },
     },
   },
 
@@ -36,6 +39,7 @@ export default defineNuxtConfig({
     server: {
       allowedHosts: [
         'localhost.dpdd.duckdns.org',
+        'localhost3001.dpdd.duckdns.org',
       ],
     },
   },

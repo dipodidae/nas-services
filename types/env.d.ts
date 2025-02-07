@@ -3,9 +3,12 @@ declare module 'nuxt/schema' {
     omdbapi: {
       apiKey: string
     }
-  }
-  interface PublicRuntimeConfig {
-    domain: string
+    twitter: {
+      oauth2: {
+        id: string
+        secret: string
+      }
+    }
   }
 }
 

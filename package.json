@@ -16,13 +16,14 @@
     "cheerio": "^1.0.0",
     "nuxt": "^3.15.3",
     "nuxt-api-party": "2.1.2",
-    "openapi-typescript": "^5 || ^6 || ^7",
+    "openapi-typescript": "^7.6.1",
+    "twitter-api-v2": "^1.19.1",
     "vue": "latest",
     "vue-router": "latest"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^4.1.0",
-    "@nuxt/eslint": "0.7.6",
+    "@antfu/eslint-config": "^4.1.1",
+    "@nuxt/eslint": "1.0.1",
     "eslint": "^9.19.0",
     "eslint-plugin-format": "^1.0.1",
     "typescript": "^5.7.3"
