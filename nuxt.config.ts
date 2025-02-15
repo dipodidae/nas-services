@@ -35,6 +35,15 @@ export default defineNuxtConfig({
 
   compatibilityDate: '2024-11-01',
 
+  nitro: {
+    storage: {
+      db: {
+        driver: 'fs',
+        base: './data/db',
+      },
+    },
+  },
+
   vite: {
     server: {
       allowedHosts: [

@@ -1,4 +1,5 @@
 import { TwitterApi } from 'twitter-api-v2'
+import dbStorage from '~~/server/utils/db-storage'
 
 export default defineEventHandler(async (event) => {
   const query = getQuery<{
@@ -6,10 +7,8 @@ export default defineEventHandler(async (event) => {
     code?: string
   }>(event)
 
-  const storage = useStorage()
-
-  const sessionState = storage.getItem('twitterState')
-  const sessionCodeVerifier = await storage.getItem<string>('twitterCodeVerifier')
+  const sessionState = await dbStorage.getItem<string>('twitter:state')
+  const sessionCodeVerifier = await dbStorage.getItem<string>('twitter:code-verifier')
 
   const errors = []
 
@@ -39,31 +38,18 @@ export default defineEventHandler(async (event) => {
     clientSecret: twitterConfig.oauth2.secret,
   })
 
-  try {
-    const {
-      client: loggedInClient,
-      accessToken,
-      refreshToken,
-    } = await client.loginWithOAuth2({
-      code: query.code ?? '',
-      codeVerifier: sessionCodeVerifier ?? '',
-      redirectUri: 'https://localhost3001.dpdd.duckdns.org/api/auth/twitter/callback',
-    })
-    loggedInClient.v2.tweet('Hello, world!')
-    await storage.setItem('twitterAccessToken', accessToken)
-    await storage.setItem('twitterRefreshToken', refreshToken ?? '')
-  }
-  catch (e) {
-    if (!(e instanceof Error)) {
-      return createError({
-        statusCode: 500,
-        statusMessage: 'Unknown error',
-      })
-    }
+  const {
+    accessToken,
+    refreshToken,
+  } = await client.loginWithOAuth2({
+    code: query.code ?? '',
+    codeVerifier: sessionCodeVerifier ?? '',
+    redirectUri: 'https://localhost3001.dpdd.duckdns.org/api/auth/twitter/callback',
+  })
 
-    return createError({
-      statusCode: 500,
-      statusMessage: e.message,
-    })
-  }
+  await dbStorage.setItem('twitter:access-token', accessToken)
+
+  await dbStorage.setItem('twitter:refresh-token', refreshToken ?? '')
+
+  await sendRedirect(event, '/')
 })

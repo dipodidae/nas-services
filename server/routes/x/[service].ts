@@ -1,5 +1,7 @@
-import type { H3Event } from 'h3'
-import { TwitterApi } from 'twitter-api-v2'
+import { TwitterApi, TwitterApiV2Settings } from 'twitter-api-v2'
+import dbStorage from '~~/server/utils/db-storage'
+
+TwitterApiV2Settings.debug = true
 
 interface RadarrRemoteMovie {
   title: string
@@ -27,15 +29,16 @@ interface RadarrBody {
   release?: RadarrRelease
 }
 
-async function tweet(event: H3Event, message: string) {
-  const client = getTwitterClient(event)
-  return client.v2.tweet(message)
+async function tweet(message: string) {
+  const client = await getTwitterClient()
+
+  return await client.v2.tweet(message)
 }
 
-function getTwitterClient(event: H3Event) {
-  const twitterConfig = useRuntimeConfig(event).twitter
+async function getTwitterClient() {
+  const accessToken = await dbStorage.getItem<string>('twitter:access-token')
 
-  return new TwitterApi(twitterConfig.bearerToken)
+  return new TwitterApi(accessToken!)
 }
 
 export default defineEventHandler(async (event) => {
@@ -43,12 +46,19 @@ export default defineEventHandler(async (event) => {
 
   try {
     if (request.eventType === 'Download')
-      await tweet(event, `🎬 Grabbed: ${request.remoteMovie?.title} (${request.remoteMovie?.year})`)
+      await tweet(`🎬 Grabbed: ${request.remoteMovie?.title} (${request.remoteMovie?.year})`)
+
+    if (request.eventType === 'Test')
+      await tweet('🎬 Test notification')
+
+    if (request.eventType === 'Rename')
+      await tweet(`🎬 Renamed: ${request.movie?.title}`)
+
+    if (request.eventType === 'Grab')
+      await tweet(`🎬 Grabbed: ${request.remoteMovie?.title} (${request.remoteMovie?.year})`)
   }
   catch (e) {
     console.error(e)
-    return 'NOK'
+    return 'nok'
   }
-
-  return 'OK'
 })

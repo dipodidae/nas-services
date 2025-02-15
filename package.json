@@ -5,7 +5,7 @@
   "packageManager": "pnpm@9.15.4+sha512.b2dc20e2fc72b3e18848459b37359a32064663e5627a51e4c74b2c29dd8e8e0491483c3abb40789cfd578bf362fb6ba8261b05f0387d76792ed6e23ea3b1b6a0",
   "scripts": {
     "build": "nuxt build",
-    "dev": "nuxt dev",
+    "dev": "nuxt dev --host --port 3001 --publicURL https://localhost3001.dpdd.duckdns.org",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
@@ -17,14 +17,14 @@
     "nuxt": "^3.15.3",
     "nuxt-api-party": "2.1.2",
     "openapi-typescript": "^7.6.1",
-    "twitter-api-v2": "^1.19.1",
+    "twitter-api-v2": "^1.20.0",
     "vue": "latest",
     "vue-router": "latest"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^4.1.1",
+    "@antfu/eslint-config": "^4.2.1",
     "@nuxt/eslint": "1.0.1",
-    "eslint": "^9.19.0",
+    "eslint": "^9.20.1",
     "eslint-plugin-format": "^1.0.1",
     "typescript": "^5.7.3"
   }
